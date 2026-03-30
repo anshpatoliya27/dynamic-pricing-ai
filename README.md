@@ -1,6 +1,6 @@
 # Dynamic Pricing & Personalization Engine
 
-A complete, production-ready full-stack template created for Problem Statement #3.
+A complete, production-ready full-stack template created for Problem Statement #3
 
 ## Project Structure
 - `frontend/` - React application
