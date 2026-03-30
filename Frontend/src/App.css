@@ -14,7 +14,7 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(10, 11, 15, 0.85);
+  background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
   padding: 16px 0;
@@ -384,8 +384,8 @@
   top: 12px;
   right: 12px;
   padding: 4px 10px;
-  background: linear-gradient(135deg, #ff6b6b, #ffc048);
-  color: #000;
+  background: linear-gradient(135deg, #e74c3c, #e5a700);
+  color: #fff;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 700;
@@ -401,7 +401,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(8px);
   z-index: 200;
   display: flex;
@@ -624,7 +624,7 @@
 
 .adjustment-impact.neutral {
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 /* ─── RECOMMENDATIONS SECTION ─── */
@@ -780,7 +780,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(135deg, #ff6b6b, #ffc048);
+  background: linear-gradient(135deg, #e74c3c, #e5a700);
 }
 
 .trending-card:hover {
@@ -795,8 +795,8 @@
   right: 12px;
   width: 28px;
   height: 28px;
-  background: linear-gradient(135deg, #ff6b6b, #ffc048);
-  color: #000;
+  background: linear-gradient(135deg, #e74c3c, #e5a700);
+  color: #fff;
   border-radius: 50%;
   display: flex;
   align-items: center;
