@@ -51,6 +51,11 @@ class EventRequest(BaseModel):
 # ❤️ HEALTH CHECK
 # ═══════════════════════════════════════════════════════════════
 
+@app.get("/")
+def root():
+    return {"message": "Backend running"}
+
+
 @app.get("/health")
 def health_check():
     return {
