@@ -200,18 +200,15 @@ flowchart LR
 
 <div align="center">
 
-### 🛒 Dashboard UI
-![Dashboard](./screenshots/dashboard.png)
+| 🛒 Dashboard 1 | 🛒 Dashboard 2 | 🛒 Dashboard 3 | 📦 Product View 1 |
+|:--------------:|:--------------:|:--------------:|:-----------------:|
+| ![](./SS/SS-1.png) | ![](./SS/SS-2.png) | ![](./SS/SS-3.png) | ![](./SS/SS-4.png) |
 
-### 📦 Product View
-![Product View](./screenshots/product.png)
-
-### 💡 Recommendations Section
-![Recommendations](./screenshots/recommendations.png)
+| 📦 Product View 2 | 💰 Pricing API | 📂 Category API | 🔥 Trending API |
+|:-----------------:|:-------------:|:---------------:|:--------------:|
+| ![](./SS/SS-5.png) | ![](./SS/SS-6.png) | ![](./SS/SS-7.png) | ![](./SS/SS-8.png) |
 
 </div>
-
-*Note: Replace placeholders with actual mockups/screenshots before submission.*
 
 ---
 
