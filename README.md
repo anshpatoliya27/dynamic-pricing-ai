@@ -332,7 +332,7 @@ Ensures AI-driven decisions remain **safe, stable, and profitable**.
 
 ---
 
-## 🚀 Project Structure
+## 🚀 9. Project Structure
 ```
 SmartCommerceAI/
 │
@@ -372,7 +372,7 @@ SmartCommerceAI/
 ```
 ---
 
-## 🚀 9. HOW TO RUN
+## 🚀 10. HOW TO RUN
 
 ### Backend Setup
 ```bash
@@ -383,7 +383,7 @@ python run.py
 
 ### Frontend Setup
 ```bash
-cd frontend
+cd Frontend
 npm install
 npm run dev
 ```
