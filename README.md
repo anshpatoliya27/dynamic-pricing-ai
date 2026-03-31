@@ -1,3 +1,29 @@
+# 🏆 Hackathon Project
+
+## 🎯 Tic Tech Toe '26  
+**Dhirubhai Ambani Institute of Information and Communication Technology (DA-IICT), Gandhinagar**
+
+---
+
+## 💡 Problem Statement 3  
+**E-Commerce Dynamic Pricing and Personalization Engine Using Real-Time Behavioral Signals**
+
+---
+
+## 🧙 Team Name  
+**Hogwarts Tech Wizards**
+
+---
+
+## 👥 Team
+
+- **Het Limbani (Team Leader)** — ML & Backend Development  
+- **Ansh Patoliya** — ML & Frontend Development  
+- **Harsh Patel** — API, Backend & Frontend Logic  
+- **Anuj Raval** — ML Development  
+
+---
+
 <div align="center">
 
 # 🛒 SmartCommerceAI: Dynamic Pricing & Personalization Engine
@@ -16,7 +42,7 @@
 
 ---
 
-## 📌 Overview
+## 1. Overview
 
 In the modern e-commerce landscape, static pricing models and "one-size-fits-all" product displays lead to missed revenue opportunities and high customer churn. 🛒  
 
@@ -42,7 +68,7 @@ Balance competitive discounting with automated **price floors** to ensure sustai
 
 ---
 
-## ⚙️ How It Works
+## 2. How It Works
 
 <details>
 <summary>Click to expand</summary>
@@ -125,7 +151,7 @@ Balance competitive discounting with automated **price floors** to ensure sustai
 
 ---
 
-## 🏗️ Tech Stack
+## 4. 🏗️ Tech Stack
 
 <div align="center">
 
@@ -355,7 +381,7 @@ Ensures AI-driven decisions remain **safe, stable, and profitable**.
 
 ---
 
-## 🚀 System Intelligence Summary
+## 8. System Intelligence Summary
 
 - 🧠 Hybrid AI (Unsupervised + Supervised)  
 - 🎯 Personalized recommendations + pricing  
@@ -379,20 +405,8 @@ graph LR
 * **🔄 Real-time adaptation**: Price scaling and behavioral mapping applied instantaneously.
 * **🚀 Efficient Compute**: Lean ML processing optimized by Pandas and backend concurrency.
 
----
 
-## 👨‍💻 10. TEAM MEMBERS
-
-### 👥 Team
-
-* **Ansh** — ML & Backend Integration
-* **Het** — Frontend Development
-* **Harsh** — API & Backend Logic
-* **Anuj** — UI/UX & Testing
-
----
-
-## 🚀 11. HOW TO RUN
+## 🚀 10. HOW TO RUN
 
 ### Backend Setup
 ```bash
