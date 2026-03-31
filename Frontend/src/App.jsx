@@ -12,6 +12,7 @@ function App() {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [selectedCategory, setSelectedCategory] = useState(null)
+  const [expandedParent, setExpandedParent] = useState(null)
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
   const [trending, setTrending] = useState([])
@@ -36,7 +37,7 @@ function App() {
           api.getDashboard()
         ])
         setProducts(productsData.products)
-        setCategories(productsData.categories)
+        setCategories(productsData.categories || [])
         setUsers(usersData.users)
         setTrending(trendingData.trending)
         setDashboard(dashboardData)
@@ -81,10 +82,40 @@ function App() {
       .catch(() => setSession(null))
   }, [selectedUser])
 
-  // ─── Filter products by category ───
-  const filteredProducts = selectedCategory
-    ? products.filter(p => p.category === selectedCategory)
-    : products
+  // ─── Load products when category changes ───
+  useEffect(() => {
+    async function loadCategoryProducts() {
+      try {
+        const data = selectedCategory
+          ? await api.getProducts(selectedCategory)
+          : await api.getProducts()
+        setProducts(data.products)
+      } catch (err) {
+        console.error('Error loading category products:', err)
+      }
+    }
+    loadCategoryProducts()
+  }, [selectedCategory])
+
+  // ─── Handle category click ───
+  const handleCategoryClick = useCallback((code, isParent = false) => {
+    if (isParent) {
+      if (expandedParent === code) {
+        // Clicking same parent — collapse it and show all
+        setExpandedParent(null)
+        setSelectedCategory(null)
+      } else {
+        // Expand new parent and filter to it
+        setExpandedParent(code)
+        setSelectedCategory(code)
+      }
+    } else {
+      // Subcategory — filter directly
+      setSelectedCategory(code)
+    }
+  }, [expandedParent])
+
+  const filteredProducts = products
 
   // ─── Handle product click ───
   const handleProductClick = useCallback(async (product) => {
@@ -267,61 +298,119 @@ function App() {
             <span className="section-badge">{filteredProducts.length} items</span>
           </div>
 
-          {/* Category Filters */}
+          {/* Category Filters — Parent Level */}
           <div className="category-filters" id="category-filters">
             <button
               className={`category-btn ${!selectedCategory ? 'active' : ''}`}
-              onClick={() => setSelectedCategory(null)}
+              onClick={() => {
+                setSelectedCategory(null)
+                setExpandedParent(null)
+              }}
             >
               All
             </button>
             {categories.map(cat => (
               <button
-                key={cat}
-                className={`category-btn ${selectedCategory === cat ? 'active' : ''}`}
-                onClick={() => setSelectedCategory(cat)}
+                key={cat.code}
+                className={`category-btn ${
+                  selectedCategory === cat.code || 
+                  (cat.subcategories && cat.subcategories.some(s => s.code === selectedCategory))
+                    ? 'active' : ''
+                }`}
+                onClick={() => handleCategoryClick(cat.code, true)}
               >
-                {cat}
+                {cat.name} ({cat.count})
               </button>
             ))}
           </div>
 
+          {/* Subcategory Filters — shown when a parent is expanded */}
+          {expandedParent && (() => {
+            const parent = categories.find(c => c.code === expandedParent)
+            if (!parent || !parent.subcategories || parent.subcategories.length === 0) return null
+            return (
+              <div className="category-filters subcategory-filters" style={{ paddingTop: 0 }}>
+                <button
+                  className={`category-btn sub-btn ${selectedCategory === expandedParent ? 'active' : ''}`}
+                  onClick={() => setSelectedCategory(expandedParent)}
+                  style={{ fontSize: 12 }}
+                >
+                  All {parent.name}
+                </button>
+                {parent.subcategories.map(sub => (
+                  <button
+                    key={sub.code}
+                    className={`category-btn sub-btn ${selectedCategory === sub.code ? 'active' : ''}`}
+                    onClick={() => handleCategoryClick(sub.code, false)}
+                    style={{ fontSize: 12 }}
+                  >
+                    {sub.name}
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
+
           {/* Product Grid */}
           <div className="product-grid" id="product-grid">
-            {filteredProducts.map((product, i) => {
-              const priceData = productPrices[product.product_id]
-              const isTrending = trending.some(t => t.product_id === product.product_id)
-              return (
-                <div
-                  key={product.product_id}
-                  className="product-card animate-in"
-                  style={{ animationDelay: `${i * 0.05}s` }}
-                  onClick={() => handleProductClick(product)}
-                  id={`product-${product.product_id}`}
-                >
-                  {isTrending && (
-                    <span className="trending-badge">🔥 Trending</span>
-                  )}
-                  <span className="product-card-emoji">{product.image}</span>
-                  <div className="product-card-category">{product.category}</div>
-                  <div className="product-card-name">{product.name}</div>
-                  <div className="product-card-desc">{product.description}</div>
-                  <div className="product-card-price">
-                    <span className="price-current">
-                      ${priceData ? priceData.final_price : product.base_price}
-                    </span>
-                    {priceData && priceData.final_price !== priceData.base_price && (
-                      <>
-                        <span className="price-base">${priceData.base_price}</span>
-                        <span className={`price-badge ${priceData.savings_percent > 0 ? 'savings' : 'increase'}`}>
-                          {priceData.savings_percent > 0 ? `Save ${priceData.savings_percent}%` : `+${Math.abs(priceData.savings_percent)}%`}
-                        </span>
-                      </>
+            {filteredProducts.length > 0 ? (
+              filteredProducts.map((product, i) => {
+                const priceData = productPrices[product.product_id]
+                const isTrending = trending.some(t => t.product_id === product.product_id)
+                return (
+                  <div
+                    key={product.product_id}
+                    className="product-card animate-in"
+                    style={{ animationDelay: `${i * 0.05}s` }}
+                    onClick={() => handleProductClick(product)}
+                    id={`product-${product.product_id}`}
+                  >
+                    {isTrending && (
+                      <span className="trending-badge">🔥 Trending</span>
                     )}
+                    <span className="product-card-emoji">{product.image}</span>
+                    <div className="product-card-category">{product.category}</div>
+                    <div className="product-card-name">{product.name}</div>
+                    <div className="product-card-desc">{product.description}</div>
+                    <div className="product-card-price">
+                      <span className="price-current">
+                        ${priceData ? priceData.final_price : product.base_price}
+                      </span>
+                      {priceData && priceData.final_price !== priceData.base_price && (
+                        <>
+                          <span className="price-base">${priceData.base_price}</span>
+                          <span className={`price-badge ${priceData.savings_percent > 0 ? 'savings' : 'increase'}`}>
+                            {priceData.savings_percent > 0 ? `Save ${priceData.savings_percent}%` : `+${Math.abs(priceData.savings_percent)}%`}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
+                )
+              })
+            ) : (
+              <div style={{
+                gridColumn: '1 / -1',
+                textAlign: 'center',
+                padding: '60px 20px',
+                color: 'var(--text-muted)'
+              }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
+                <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>No products found</div>
+                <div style={{ fontSize: 14, marginBottom: 20 }}>
+                  Try selecting a different category or browse all products
                 </div>
-              )
-            })}
+                <button
+                  className="category-btn active"
+                  onClick={() => {
+                    setSelectedCategory(null)
+                    setExpandedParent(null)
+                  }}
+                >
+                  Show All Products
+                </button>
+              </div>
+            )}
           </div>
         </section>
 

@@ -269,6 +269,35 @@
   box-shadow: var(--shadow-glow);
 }
 
+/* ─── SUBCATEGORY FILTERS ─── */
+.subcategory-filters {
+  margin-top: -16px;
+  margin-bottom: 28px;
+  padding-left: 12px;
+  border-left: 3px solid var(--accent-primary);
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.category-btn.sub-btn {
+  padding: 5px 14px;
+  font-size: 12px;
+  border-radius: 16px;
+  background: var(--bg-secondary);
+  border-color: var(--border);
+}
+
+.category-btn.sub-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-primary);
+}
+
+.category-btn.sub-btn.active {
+  background: var(--accent-secondary);
+  color: white;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(110, 86, 207, 0.2);
+}
+
 /* ─── PRODUCT GRID ─── */
 .product-grid {
   display: grid;
