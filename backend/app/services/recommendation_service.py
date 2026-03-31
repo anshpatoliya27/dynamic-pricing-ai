@@ -1,105 +1,153 @@
-"""
-Recommendation Service (Het's Logic)
-- Category-based recommendations
-- Trending products (based on event frequency)
-- Session-based recommendations (Ansh's contribution)
-"""
-from collections import Counter
-from app.data_store import PRODUCTS, PRODUCT_MAP, EVENTS, SESSIONS
+import joblib
+import numpy as np
+import pandas as pd
+import os
+
+# =========================
+# LOAD DATA (CORRECT PATH)
+# =========================
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+data_path = os.path.join(BASE_DIR, "data", "catrecommandprocessed_data.csv")
+
+data = pd.read_csv(data_path)
 
 
-def get_trending_products(limit: int = 5):
-    """
-    Generate trending products based on event frequency.
-    trending = events.groupby("product_id").size().sort_values(ascending=False)
-    """
-    if not EVENTS:
-        return []
-
-    # Count events per product
-    event_counts = Counter(e["product_id"] for e in EVENTS)
-    trending_ids = [pid for pid, _ in event_counts.most_common(limit)]
-
-    trending = []
-    for pid in trending_ids:
-        product = PRODUCT_MAP.get(pid)
-        if product:
-            trending.append({
-                **product,
-                "view_count": event_counts[pid],
-                "trending_rank": trending_ids.index(pid) + 1
-            })
-    return trending
+# =========================
+# CATEGORY
+# =========================
+def recommend_category(category):
+    temp = data[data['category_code'] == category]
+    temp = temp.sort_values(by='final_score', ascending=False)
+    return temp.head(5)
 
 
-def get_category_recommendations(product_id: str, limit: int = 5):
-    """
-    Category-based recommendation:
-    Find products in the same category as the given product.
-    """
-    product = PRODUCT_MAP.get(product_id)
-    if not product:
-        return []
+# =========================
+# PRODUCT
+# =========================
+def recommend_product(product_id):
+    product = data[data['product_id'] == product_id]
 
-    category = product["category"]
-    recommendations = [
-        p for p in PRODUCTS
-        if p["category"] == category and p["product_id"] != product_id
-    ][:limit]
+    if product.empty:
+        return pd.DataFrame()
 
-    return recommendations
+    category = product.iloc[0]['category_code']
 
+    temp = data[data['category_code'] == category]
+    temp = temp[temp['product_id'] != product_id]
+    temp = temp.sort_values(by='final_score', ascending=False)
 
-def get_session_recommendations(user_id: str, limit: int = 5):
-    """
-    Session-based recommendation (Ansh's logic):
-    Recommend based on the last viewed product's category.
-    """
-    session = SESSIONS.get(user_id)
-    if not session or not session["products_viewed"]:
-        # For new users, return trending products
-        return get_trending_products(limit)
-
-    last_product_id = session["products_viewed"][-1]
-    return get_category_recommendations(last_product_id, limit)
+    return temp.head(5)
 
 
-def get_full_recommendations(product_id: str, user_id: str = None):
-    """
-    Combined recommendation engine:
-    Returns category-based, trending, and session-based recommendations
-    with explanation text.
-    """
-    category_recs = get_category_recommendations(product_id)
-    trending = get_trending_products(5)
+# =========================
+# EXPLAIN
+# =========================
+def recommend_explain(product_id):
+    product = data[data['product_id'] == product_id]
 
-    session_recs = []
-    session_explanation = ""
-    if user_id:
-        session_recs = get_session_recommendations(user_id)
-        session = SESSIONS.get(user_id)
-        if session and session["products_viewed"]:
-            last_pid = session["products_viewed"][-1]
-            last_product = PRODUCT_MAP.get(last_pid, {})
-            session_explanation = f"Recommended because you recently viewed {last_product.get('name', 'similar items')}"
-        else:
-            session_explanation = "Recommended based on what's trending right now"
+    if product.empty:
+        return {"error": "Product not found"}
 
-    product = PRODUCT_MAP.get(product_id, {})
-    category_explanation = f"Similar products in {product.get('category', 'this category')}"
-    trending_explanation = "Trending right now based on user activity"
+    category = product.iloc[0]['category_code']
 
     return {
-        "category_based": {
-            "products": category_recs,
-            "explanation": category_explanation
-        },
-        "trending": {
-            "products": trending,
-            "explanation": trending_explanation
-        },
-        "session_based": {
-            "products": session_recs,
-            "explanation": session_explanation
-        }
+        "reason": f"Based on your interest in {category}",
+        "products": recommend_product(product_id).to_dict(orient="records")
     }
+    
+def get_trending_products(top_n=5):
+    temp = data.sort_values(by='popularity', ascending=False)
+
+    temp = temp.drop_duplicates(subset=['product_id'])
+
+    return temp.head(top_n)[
+        ['product_id', 'category_code', 'brand', 'price', 'final_score']
+    ]
+ 
+ 
+ 
+model = joblib.load(os.path.join(BASE_DIR,"data", "model.pkl"))
+scaler = joblib.load(os.path.join(BASE_DIR, "data", "scaler.pkl"))
+features_list = joblib.load(os.path.join(BASE_DIR, "data", "features.pkl"))
+
+agg_df = pd.read_csv(os.path.join(BASE_DIR, "data", "pricing_data.csv"))
+raw_events_df = pd.read_csv(os.path.join(BASE_DIR, "data", "Dataset.csv"))
+
+# 🔥 IMPORTANT: Fix datatype mismatch
+agg_df['product_id'] = agg_df['product_id'].astype(int)
+raw_events_df['product_id'] = raw_events_df['product_id'].astype(int)
+raw_events_df['user_id'] = raw_events_df['user_id'].astype(int)
+
+
+# =========================
+# USER CLASSIFICATION
+# =========================
+def classify_user_dynamically(user_id):
+
+    user_data = raw_events_df[raw_events_df['user_id'] == user_id]
+
+    if user_data.empty:
+        return None   # user not found
+
+    user_purchases = user_data[user_data['event_type'] == 'purchase']
+
+    if user_purchases.empty:
+        return "low_spender"
+
+    total_spent = user_purchases['price'].sum()
+    order_count = len(user_purchases)
+
+    aov = total_spent / order_count
+
+    return "low_spender" if aov < 50 else "high_spender"
+
+
+# =========================
+# CORE PRICING FUNCTION
+# =========================
+def get_dynamic_price(product_id, user_id):
+
+    # -------- PRODUCT CHECK --------
+    product_row = agg_df[agg_df['product_id'] == product_id]
+
+    if product_row.empty:
+        return None, "Product not found", None
+
+    row = product_row.iloc[0]
+    base_price = row['price']
+
+    # -------- USER CHECK --------
+    user_type = classify_user_dynamically(user_id)
+
+    if user_type is None:
+        return None, "User not found", None
+
+    # -------- ML PREDICTION --------
+    input_data = np.array([[row[f] for f in features_list]])
+    input_scaled = scaler.transform(input_data)
+
+    factor = np.expm1(model.predict(input_scaled))[0]
+    price = base_price * factor
+
+    # -------- BUSINESS RULES --------
+    demand = row['demand']
+    reason = "Normal demand"
+
+    if demand > 100:
+        price *= 1.1
+        reason = "Very high demand"
+    elif demand > 50:
+        price *= 1.05
+        reason = "High demand"
+    elif demand < 10:
+        price *= 0.9
+        reason = "Low demand"
+
+    # -------- USER PERSONALIZATION --------
+    if user_type == "low_spender":
+        price *= 0.9
+
+    # -------- SAFETY RULE --------
+    price = max(price, base_price * 0.7)
+
+    return round(price, 2), reason, user_type
