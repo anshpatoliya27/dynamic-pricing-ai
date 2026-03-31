@@ -125,17 +125,82 @@ Balance competitive discounting with automated **price floors** to ensure sustai
 
 ---
 
-## 🏗️ 4. TECH STACK
+## 🏗️ Tech Stack
 
 <div align="center">
 
-| **Frontend** 🎨 | **Backend** ⚙️ | **Machine Learning** 🤖 |
-|:---:|:---:|:---:|
-| React | FastAPI | Apriori Algorithm |
-| Vite | Python 3 | Pandas |
-| Tailwind CSS | REST APIs | mlxtend |
+| **Frontend** 🎨 | **Backend** ⚙️ | **Data Handling** 📊 | **Machine Learning** 🤖 |
+|:---:|:---:|:---:|:---:|
+| React.js | FastAPI / Flask | Pandas & NumPy | Gradient Boosting (GBR) |
+| Vite | Python 3.9+ | Feature Engineering | Apriori & Association Rules |
+| Tailwind CSS | RESTful APIs | Scikit-Learn Preprocessing | Polynomial Features |
+| Axios | Joblib / Pickle | Log Transformation | Hyperparameter Tuning |
 
 </div>
+
+---
+
+## 🧠 Deep Dive: Model Architecture
+
+### ⚡ Core Pricing Engine
+- **Gradient Boosting Regressor (GBR):**  
+  Powers the dynamic pricing system by learning complex, non-linear relationships between:
+  - Demand fluctuations  
+  - User behavior  
+  - Market signals  
+
+  Unlike traditional linear models, GBR adapts to changing patterns and identifies optimal price points in real time.
+
+---
+
+### 🔗 Feature Engineering Layer
+- **Polynomial Features:**  
+  Captures interaction effects between variables.  
+  Example:
+  - High Views + Low Conversion → Indicates price sensitivity  
+  - High Views + High Cart Adds → Indicates strong demand  
+
+  This helps the model understand deeper behavioral patterns beyond simple metrics.
+
+---
+
+### 📊 Data Processing Pipeline
+
+- **Normalization (Robust Scaling):**  
+  Handles extreme outliers in traffic and pricing data, ensuring stable model performance.
+
+- **Log Transformation:**  
+  Applied to skewed demand distributions to:
+  - Stabilize variance  
+  - Improve prediction accuracy  
+  - Enhance model convergence  
+
+- **Feature Aggregation:**  
+  Converts raw event logs into meaningful product-level insights such as:
+  - View-to-cart ratio  
+  - Conversion rate  
+  - Demand intensity  
+
+---
+
+### 🧪 Model Optimization
+
+- **Hyperparameter Tuning:**  
+  Fine-tunes model performance using techniques like:
+  - Grid Search  
+  - Random Search  
+
+- **Serialization (Joblib / Pickle):**  
+  Efficient storage and deployment of trained models for real-time inference.
+
+---
+
+## 🚀 Why This Architecture Works
+
+- ✅ Handles real-time, high-volume e-commerce data  
+- ✅ Captures complex user behavior patterns  
+- ✅ Scales easily with growing product catalogs  
+- ✅ Enables accurate, automated pricing decisions  
 
 ---
 
@@ -182,13 +247,121 @@ flowchart LR
 
 ---
 
-## 🤖 8. AI MODEL DETAILS
+## 🤖 AI Model Details
 
-This engine uses the **Apriori Algorithm**, an extensively proven technique for Association Rule Mining.
+The engine operates on a **multi-model architecture**, combining:
+- 🔍 Unsupervised pattern recognition  
+- 📈 Supervised regression  
 
-* **What it is**: It discovers interesting relationships (or "rules") hidden in massive transaction datasets.
-* **How it works**: By calculating metrics like *support*, *confidence*, and *lift*, the engine identifies products that are frequently bought together.
-* **Example Output**: If a user is viewing an **`iPhone`**, the engine recognizes high confidence that they will also purchase **`AirPods`**, automatically surfacing those products.
+This hybrid approach powers both **product discovery** and **revenue optimization**.
+
+---
+
+## 🛒 1. Product-Level Recommendation (Apriori)
+
+<details>
+<summary>Click to expand</summary>
+
+### 🔗 Overview
+The "Frequently Bought Together" engine is powered by **Association Rule Mining (Apriori Algorithm)**.
+
+### ⚙️ The Logic
+- Identifies hidden relationships in large-scale transaction datasets  
+- Analyzes **co-occurrence patterns** between products  
+
+### 📊 Key Metrics
+- **Support:** Frequency of itemset occurrence  
+- **Confidence:** Probability of buying item B given item A  
+- **Lift:** Strength of association (filters random correlations)  
+
+### 💡 Example
+If a user views an **iPhone**, the model detects a strong association with **AirPods** and recommends them instantly.
+
+</details>
+
+---
+
+## 📂 2. Category-Based Personalization
+
+<details>
+<summary>Click to expand</summary>
+
+### ❄️ Cold Start Solution
+Handles users with little or no interaction history.
+
+### ⚙️ The Logic
+- Falls back to a **Category-Heuristic Model**  
+- Uses **cross-category affinity** when product-level rules are unavailable  
+
+### 🎯 Contextual Awareness
+- Recommends top-performing products from:
+  - Same `category_code`  
+  - Related sub-categories  
+
+Ensures users always see **relevant recommendations**, even with limited data.
+
+</details>
+
+---
+
+## 📈 3. Dynamic Pricing Engine (Gradient Boosting)
+
+<details>
+<summary>Click to expand</summary>
+
+### 🧠 Overview
+Acts as the **"Revenue Brain"** of the system using **Elasticity-Based Pricing**.
+
+### ⚙️ Algorithm
+- **GradientBoostingRegressor (GBR)**
+
+### 🔄 Process
+
+1. **Feature Extraction**
+   - Log_Demand  
+   - Conversion_Rate  
+   - Cart_Ratio  
+
+2. **Predictive Modeling**
+   - Builds an ensemble of decision trees  
+   - Predicts **Optimal Price Factor** *(0.7x → 1.5x of base price)*  
+
+3. **User-Aware Adjustment**
+   - Applies **User Segmentation (AOV-based)**  
+   - Offers targeted **conversion discounts** to price-sensitive users  
+
+</details>
+
+---
+
+## 🛡️ 4. Business Guardrails (Safety Layer)
+
+<details>
+<summary>Click to expand</summary>
+
+### ⚖️ Purpose
+Ensures AI-driven decisions remain **safe, stable, and profitable**.
+
+### 🔒 Rules Implemented
+
+- **Price Floor:**  
+  No product price drops below **70% of original cost**, protecting margins  
+
+- **Inventory Buffer:**  
+  Limits aggressive pricing when stock levels are critically low  
+  → Prevents overselling at reduced margins  
+
+</details>
+
+---
+
+## 🚀 System Intelligence Summary
+
+- 🧠 Hybrid AI (Unsupervised + Supervised)  
+- 🎯 Personalized recommendations + pricing  
+- 💰 Revenue optimization with safety constraints  
+- ⚡ Real-time adaptive decision-making  
+
 
 ---
 
