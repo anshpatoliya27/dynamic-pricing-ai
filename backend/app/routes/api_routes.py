@@ -1,97 +1,169 @@
 """
 API Routes — Serves all /api/... endpoints expected by the React frontend.
-Maps frontend calls to the data_store and recommendation_service modules.
+Uses real ML models for recommendations and dynamic pricing.
 """
 
 from flask import Blueprint, jsonify, request
-from app.data_store import (
-    PRODUCTS, PRODUCT_MAP, USERS, EVENTS, SESSIONS,
-    COMPETITOR_PRICES
+from app.services.recommendation_service import (
+    get_top_products,
+    get_products_by_category,
+    get_product_detail,
+    format_product,
+    recommend_by_category,
+    recommend_similar_products,
+    recommend_by_association,
+    get_trending,
+    get_dynamic_price,
+    classify_user,
+    ALL_CATEGORIES,
+    PRODUCT_LOOKUP,
+    cat_data,
+    raw_events_df,
+    _format_category_name,
 )
-import random
 from datetime import datetime
 from collections import Counter
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
+# ═══════════════════════════════════════════════════════════════
+# IN-MEMORY SESSION & EVENT TRACKING
+# ═══════════════════════════════════════════════════════════════
+LIVE_EVENTS = []    # Events recorded during this server session
+SESSIONS = {}       # user_id -> {products_viewed: [...], last_active: ...}
+
+# Pre-built user personas for demo (mapped to real user_ids from Dataset)
+DEMO_USERS = {}
+
+def _build_demo_users():
+    """Pick 4 real users from the dataset with different spending patterns."""
+    global DEMO_USERS
+
+    # Get unique user_ids that have purchase events
+    purchasers = raw_events_df[raw_events_df['event_type'] == 'purchase']['user_id'].unique()
+    browsers = raw_events_df[raw_events_df['event_type'] == 'view']['user_id'].unique()
+
+    # Classify a sample
+    classified = {}
+    for uid in purchasers[:200]:
+        seg = classify_user(int(uid))
+        if seg not in classified:
+            classified[seg] = int(uid)
+        if len(classified) >= 3:
+            break
+
+    # Find a browser-only user
+    for uid in browsers:
+        if uid not in purchasers:
+            classified['browser'] = int(uid)
+            break
+
+    # If we don't have enough variety, use synthetic IDs
+    user_templates = [
+        {"user_type": "premium",     "name": "Alex Premium",   "avatar": "👨‍💼"},
+        {"user_type": "regular",     "name": "Sam Regular",    "avatar": "👩‍💻"},
+        {"user_type": "low_spender", "name": "Jordan Budget",  "avatar": "🧑‍🎓"},
+        {"user_type": "new_user",    "name": "Taylor New",     "avatar": "👤"},
+    ]
+
+    for template in user_templates:
+        seg = template["user_type"]
+        real_uid = classified.get(seg)
+        if real_uid:
+            uid_str = str(real_uid)
+        else:
+            # Create a synthetic user ID
+            uid_str = "U_" + seg
+            real_uid = None
+
+        DEMO_USERS[uid_str] = {
+            "user_id": uid_str,
+            "real_user_id": real_uid,
+            "name": template["name"],
+            "user_type": seg,
+            "avatar": template["avatar"],
+        }
+
+        # Pre-build sessions from real data
+        if real_uid:
+            user_events = raw_events_df[raw_events_df['user_id'] == real_uid]
+            viewed_pids = user_events['product_id'].unique()[:5].tolist()
+            SESSIONS[uid_str] = {
+                "user_id": uid_str,
+                "products_viewed": [str(pid) for pid in viewed_pids],
+                "last_active": datetime.now().isoformat()
+            }
+
+_build_demo_users()
+
 
 # ═══════════════════════════════════════════════════════════════
-# 📦 PRODUCTS
+# 📦 PRODUCTS   (GET /api/products)
 # ═══════════════════════════════════════════════════════════════
 
 @api_bp.route("/products", methods=["GET"])
-def get_products():
-    """Return all products, optionally filtered by category."""
+def api_get_products():
+    """Return top products with formatted data, optionally filtered by category."""
     category = request.args.get("category", None)
 
     if category:
-        filtered = [p for p in PRODUCTS if p["category"] == category]
+        products = get_products_by_category(category, n=20)
     else:
-        filtered = PRODUCTS
+        products = get_top_products(n=20)
 
-    categories = sorted(set(p["category"] for p in PRODUCTS))
+    # Human-readable category list
+    categories = [_format_category_name(c) for c in ALL_CATEGORIES[:15]]
 
     return jsonify({
-        "products": filtered,
+        "products": products,
         "categories": categories
     })
 
 
 @api_bp.route("/products/<product_id>", methods=["GET"])
-def get_product(product_id):
+def api_get_product(product_id):
     """Return a single product by ID."""
-    product = PRODUCT_MAP.get(product_id)
+    product = get_product_detail(product_id)
     if not product:
         return jsonify({"error": "Product not found"}), 404
     return jsonify(product)
 
 
 # ═══════════════════════════════════════════════════════════════
-# 👤 USERS & SESSIONS
+# 👤 USERS   (GET /api/users)
 # ═══════════════════════════════════════════════════════════════
 
 @api_bp.route("/users", methods=["GET"])
-def get_users():
-    """Return all simulated user profiles."""
+def api_get_users():
+    """Return demo user profiles."""
     return jsonify({
-        "users": list(USERS.values())
+        "users": list(DEMO_USERS.values())
     })
 
 
+# ═══════════════════════════════════════════════════════════════
+# 🧭 SESSIONS   (GET /api/session/<user_id>)
+# ═══════════════════════════════════════════════════════════════
+
 @api_bp.route("/session/<user_id>", methods=["GET"])
-def get_session(user_id):
-    """Return session data for a user, including journey explanation."""
-    session = SESSIONS.get(user_id)
-    if not session:
-        return jsonify({
-            "user_id": user_id,
-            "products_viewed": [],
-            "total_views": 0,
-            "journey_explanation": "No browsing history yet.",
-            "last_active": None
-        })
+def api_get_session(user_id):
+    """Return session data for a user with journey explanation."""
+    session = SESSIONS.get(user_id, {})
+    viewed_pids = session.get("products_viewed", [])
 
-    # Enrich products_viewed with product details
-    enriched_products = []
-    for pid in session.get("products_viewed", []):
-        product = PRODUCT_MAP.get(pid)
+    enriched = []
+    categories_seen = []
+    for pid in viewed_pids:
+        product = get_product_detail(pid)
         if product:
-            enriched_products.append({
-                "product_id": pid,
-                "name": product["name"],
-                "image": product["image"],
-                "category": product["category"],
-                "base_price": product["base_price"]
-            })
+            enriched.append(product)
+            categories_seen.append(product["category"])
 
-    total_views = len(enriched_products)
-
-    # Build journey explanation
+    total_views = len(enriched)
     if total_views == 0:
         journey = "Start browsing to build your personalized journey!"
     else:
-        cats = [p["category"] for p in enriched_products]
-        cat_counts = Counter(cats)
+        cat_counts = Counter(categories_seen)
         top_cat = cat_counts.most_common(1)[0][0]
         journey = (
             f"You've explored {total_views} product(s), showing strong interest "
@@ -100,7 +172,7 @@ def get_session(user_id):
 
     return jsonify({
         "user_id": user_id,
-        "products_viewed": enriched_products,
+        "products_viewed": enriched,
         "total_views": total_views,
         "journey_explanation": journey,
         "last_active": session.get("last_active")
@@ -108,32 +180,31 @@ def get_session(user_id):
 
 
 # ═══════════════════════════════════════════════════════════════
-# 📊 EVENTS
+# 📊 EVENTS   (POST /api/events)
 # ═══════════════════════════════════════════════════════════════
 
 @api_bp.route("/events", methods=["POST"])
-def record_event():
+def api_record_event():
     """Record a user interaction event and update session."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Missing JSON body"}), 400
 
-    user_id = data.get("user_id")
-    product_id = data.get("product_id")
+    user_id = str(data.get("user_id", ""))
+    product_id = str(data.get("product_id", ""))
     event_type = data.get("event_type", "view")
 
     if not user_id or not product_id:
-        return jsonify({"error": "user_id and product_id are required"}), 400
+        return jsonify({"error": "user_id and product_id required"}), 400
 
-    # Add event
     event = {
-        "event_id": f"E{len(EVENTS)+1:05d}",
+        "event_id": f"E{len(LIVE_EVENTS)+1:05d}",
         "user_id": user_id,
         "product_id": product_id,
         "event_type": event_type,
         "timestamp": datetime.now().isoformat()
     }
-    EVENTS.append(event)
+    LIVE_EVENTS.append(event)
 
     # Update session
     if user_id not in SESSIONS:
@@ -142,7 +213,6 @@ def record_event():
             "products_viewed": [],
             "last_active": datetime.now().isoformat()
         }
-
     session = SESSIONS[user_id]
     if product_id not in session["products_viewed"]:
         session["products_viewed"].append(product_id)
@@ -152,277 +222,147 @@ def record_event():
 
 
 # ═══════════════════════════════════════════════════════════════
-# 🔥 TRENDING
+# 🔥 TRENDING   (GET /api/trending)
 # ═══════════════════════════════════════════════════════════════
 
 @api_bp.route("/trending", methods=["GET"])
-def get_trending():
-    """Return trending products based on event activity."""
+def api_get_trending():
+    """Return trending products based on real ML popularity scores."""
     limit = request.args.get("limit", 5, type=int)
+    trending_raw = get_trending(top_n=limit)
+    trending = [format_product(item) for item in trending_raw]
 
-    # Count interactions per product
-    product_counts = Counter(e["product_id"] for e in EVENTS)
-    top_products = product_counts.most_common(limit)
-
-    trending = []
-    for rank, (pid, count) in enumerate(top_products, 1):
-        product = PRODUCT_MAP.get(pid)
-        if product:
-            trending.append({
-                "product_id": pid,
-                "name": product["name"],
-                "category": product["category"],
-                "image": product["image"],
-                "base_price": product["base_price"],
-                "description": product["description"],
-                "stock": product["stock"],
-                "view_count": count,
-                "trending_rank": f"#{rank}"
-            })
+    # Add rank & view_count to formatted items
+    for i, item in enumerate(trending):
+        item['trending_rank'] = f"#{i+1}"
+        item['view_count'] = trending_raw[i].get('view_count', trending_raw[i].get('interaction_count', 0))
 
     return jsonify({"trending": trending})
 
 
 # ═══════════════════════════════════════════════════════════════
-# 💰 DYNAMIC PRICING
+# 💰 DYNAMIC PRICING   (GET /api/price/<product_id>[/<user_id>])
 # ═══════════════════════════════════════════════════════════════
 
 @api_bp.route("/price/<product_id>", methods=["GET"])
 @api_bp.route("/price/<product_id>/<user_id>", methods=["GET"])
-def get_price(product_id, user_id=None):
+def api_get_price(product_id, user_id=None):
     """
-    Calculate a dynamic price for a product, personalized to a user.
-    Uses demand, competitor data, user segment, and stock level.
+    Calculate dynamic price using the trained GradientBoosting model.
+    Prices are cached daily — same product+user_segment returns cached result
+    until the next calendar day.
     """
-    product = PRODUCT_MAP.get(product_id)
-    if not product:
-        return jsonify({"error": "Product not found"}), 404
+    # Resolve real user_id from demo users
+    real_uid = None
+    if user_id and user_id in DEMO_USERS:
+        real_uid = DEMO_USERS[user_id].get("real_user_id")
+    elif user_id:
+        try:
+            real_uid = int(user_id)
+        except (ValueError, TypeError):
+            real_uid = None
 
-    base_price = product["base_price"]
-    final_price = base_price
-    adjustments = []
+    result = get_dynamic_price(product_id, real_uid)
 
-    # ── 1. Demand factor ──
-    product_events = [e for e in EVENTS if e["product_id"] == product_id]
-    demand_count = len(product_events)
+    if result is None:
+        return jsonify({"error": "Product not found in pricing model"}), 404
 
-    if demand_count > 50:
-        factor = 1.12
-        final_price *= factor
-        adjustments.append({
-            "factor": "High Demand",
-            "description": f"{demand_count} interactions detected — surge pricing applied",
-            "impact": f"+{round((factor - 1) * 100)}%",
-            "icon": "📈"
-        })
-    elif demand_count > 20:
-        factor = 1.05
-        final_price *= factor
-        adjustments.append({
-            "factor": "Moderate Demand",
-            "description": f"{demand_count} interactions — slight price increase",
-            "impact": f"+{round((factor - 1) * 100)}%",
-            "icon": "📊"
-        })
-    elif demand_count < 5:
-        factor = 0.92
-        final_price *= factor
-        adjustments.append({
-            "factor": "Low Demand",
-            "description": "Low interaction count — discount applied to boost sales",
-            "impact": f"{round((factor - 1) * 100)}%",
-            "icon": "📉"
-        })
-
-    # ── 2. Competitor pricing ──
-    competitor_price = COMPETITOR_PRICES.get(product_id)
-    if competitor_price:
-        if final_price > competitor_price * 1.05:
-            adj = 0.97
-            final_price *= adj
-            adjustments.append({
-                "factor": "Competitor Match",
-                "description": f"Competitor price ${competitor_price} — adjusting to stay competitive",
-                "impact": "-3%",
-                "icon": "🏪"
-            })
-        elif final_price < competitor_price * 0.90:
-            adj = 1.03
-            final_price *= adj
-            adjustments.append({
-                "factor": "Price Optimization",
-                "description": f"Below competitor (${competitor_price}) — slight increase for margin",
-                "impact": "+3%",
-                "icon": "💹"
-            })
-
-    # ── 3. Stock level ──
-    stock = product.get("stock", 50)
-    if stock < 15:
-        factor = 1.08
-        final_price *= factor
-        adjustments.append({
-            "factor": "Low Stock",
-            "description": f"Only {stock} units remaining — scarcity premium",
-            "impact": f"+{round((factor - 1) * 100)}%",
-            "icon": "📦"
-        })
-    elif stock > 100:
-        factor = 0.95
-        final_price *= factor
-        adjustments.append({
-            "factor": "Overstock",
-            "description": f"{stock} units in stock — clearance discount",
-            "impact": f"{round((factor - 1) * 100)}%",
-            "icon": "🏷️"
-        })
-
-    # ── 4. User segment personalization ──
-    user = USERS.get(user_id) if user_id else None
-    if user:
-        user_type = user["user_type"]
-        if user_type == "premium":
-            factor = 0.90
-            final_price *= factor
-            adjustments.append({
-                "factor": "Premium Member",
-                "description": "Exclusive 10% loyalty discount for premium members",
-                "impact": "-10%",
-                "icon": "👑"
-            })
-        elif user_type == "new_user":
-            factor = 0.93
-            final_price *= factor
-            adjustments.append({
-                "factor": "Welcome Offer",
-                "description": "7% welcome discount for new users",
-                "impact": "-7%",
-                "icon": "🎉"
-            })
-        elif user_type == "low_spender":
-            factor = 0.95
-            final_price *= factor
-            adjustments.append({
-                "factor": "Budget Friendly",
-                "description": "5% discount to encourage purchase",
-                "impact": "-5%",
-                "icon": "💚"
-            })
-
-    # ── Safety: never go below 70% of base ──
-    final_price = max(final_price, base_price * 0.70)
-    final_price = round(final_price, 2)
-
-    total_savings = round(base_price - final_price, 2)
-    savings_percent = round((total_savings / base_price) * 100, 1) if base_price > 0 else 0
-
-    # Build explanation string
-    if savings_percent > 0:
-        explanation = f"Price reduced by {savings_percent}% based on {len(adjustments)} factor(s)"
-    elif savings_percent < 0:
-        explanation = f"Price increased by {abs(savings_percent)}% due to market conditions"
-    else:
-        explanation = "Base price — no adjustments needed"
-
-    return jsonify({
-        "product_id": product_id,
-        "base_price": base_price,
-        "final_price": final_price,
-        "total_savings": total_savings,
-        "savings_percent": savings_percent,
-        "explanation": explanation,
-        "adjustments": adjustments,
-        "user_segment": user["user_type"] if user else "anonymous"
-    })
+    return jsonify(result)
 
 
 # ═══════════════════════════════════════════════════════════════
-# 🎯 RECOMMENDATIONS
+# 🎯 RECOMMENDATIONS   (GET /api/recommendations/<product_id>)
 # ═══════════════════════════════════════════════════════════════
 
 @api_bp.route("/recommendations/<product_id>", methods=["GET"])
-def get_recommendations(product_id, user_id=None):
+def api_get_recommendations(product_id):
     """
-    Return multi-strategy recommendations:
-    - category_based: products in the same category
-    - session_based: products related to user's browsing session
-    - trending: currently popular items
+    Multi-strategy recommendations using real ML models:
+    1. Category-based (Polynomial Regression model)
+    2. Frequently bought together (Apriori association rules)
+    3. Trending (popularity from ML model)
     """
-    user_id = request.args.get("user_id", user_id)
-    product = PRODUCT_MAP.get(product_id)
+    user_id = request.args.get("user_id", None)
+    pid = int(product_id)
 
+    product = PRODUCT_LOOKUP.get(pid)
     if not product:
         return jsonify({"error": "Product not found"}), 404
 
-    category = product["category"]
+    category = product.get('category_code', 'unknown')
 
-    # ── Category-based recommendations ──
-    cat_products = [
-        p for p in PRODUCTS
-        if p["category"] == category and p["product_id"] != product_id
-    ]
-    random.shuffle(cat_products)
-    cat_recs = cat_products[:4]
+    # 1. Category-based recommendations (ML model)
+    cat_recs_raw = recommend_similar_products(pid, top_n=5)
+    cat_recs = [format_product(r) for r in cat_recs_raw]
 
-    # ── Session-based recommendations ──
+    # 2. Association rules (Apriori model)
+    assoc_recs_raw = recommend_by_association(pid, top_n=5)
+    assoc_recs = [format_product(r) for r in assoc_recs_raw]
+
+    # 3. Session-based (from user's browsing history)
     session_recs = []
     if user_id and user_id in SESSIONS:
-        viewed_ids = SESSIONS[user_id].get("products_viewed", [])
-        viewed_categories = set()
-        for vid in viewed_ids:
-            vp = PRODUCT_MAP.get(vid)
+        viewed_pids = SESSIONS[user_id].get("products_viewed", [])
+        seen_categories = set()
+        for vpid in viewed_pids:
+            vp = PRODUCT_LOOKUP.get(int(vpid)) if vpid.isdigit() else None
             if vp:
-                viewed_categories.add(vp["category"])
+                seen_categories.add(vp.get('category_code', ''))
 
-        # Products from categories the user has browsed, excluding current
-        session_candidates = [
-            p for p in PRODUCTS
-            if p["category"] in viewed_categories
-            and p["product_id"] != product_id
-            and p["product_id"] not in viewed_ids
-        ]
-        random.shuffle(session_candidates)
-        session_recs = session_candidates[:4]
+        for scat in seen_categories:
+            if scat != category and scat != 'unknown':
+                recs = recommend_by_category(scat, top_n=2)
+                session_recs.extend([format_product(r) for r in recs])
+        session_recs = session_recs[:4]
 
-    # ── Trending recommendations ──
-    product_counts = Counter(e["product_id"] for e in EVENTS)
-    top_pids = [pid for pid, _ in product_counts.most_common(8) if pid != product_id]
-    trending_recs = [PRODUCT_MAP[pid] for pid in top_pids if pid in PRODUCT_MAP][:4]
+    # 4. Trending
+    trending_raw = get_trending(top_n=5)
+    trending_recs = [format_product(r) for r in trending_raw if int(r['product_id']) != pid][:4]
 
     return jsonify({
         "product_id": product_id,
         "category_based": {
-            "explanation": f"Similar products in {category}",
+            "explanation": f"Similar products in {_format_category_name(category)} (ML scored)",
             "products": cat_recs
         },
+        "frequently_bought": {
+            "explanation": "Customers who viewed this also bought (Apriori model)",
+            "products": assoc_recs
+        },
         "session_based": {
-            "explanation": "Based on your browsing history" if session_recs else "Browse more products to unlock",
+            "explanation": "Based on your browsing history" if session_recs else "Browse more to unlock personalized picks",
             "products": session_recs
         },
         "trending": {
-            "explanation": "Popular with other shoppers right now",
+            "explanation": "Most popular products right now (by ML popularity score)",
             "products": trending_recs
         }
     })
 
 
 # ═══════════════════════════════════════════════════════════════
-# 📊 DASHBOARD
+# 📊 DASHBOARD   (GET /api/dashboard)
 # ═══════════════════════════════════════════════════════════════
 
 @api_bp.route("/dashboard", methods=["GET"])
-def get_dashboard():
-    """Return aggregate stats for the dashboard."""
-    categories = sorted(set(p["category"] for p in PRODUCTS))
+def api_get_dashboard():
+    """Return real aggregate stats from the ML data."""
     active_sessions = sum(
         1 for s in SESSIONS.values()
         if len(s.get("products_viewed", [])) > 0
     )
 
+    total_events_in_dataset = len(raw_events_df)
+    total_live_events = len(LIVE_EVENTS)
+
+    categories = [_format_category_name(c) for c in ALL_CATEGORIES[:15]]
+
     return jsonify({
-        "total_products": len(PRODUCTS),
-        "total_events": len(EVENTS),
-        "total_users": len(USERS),
+        "total_products": len(PRODUCT_LOOKUP),
+        "total_events": total_events_in_dataset + total_live_events,
+        "total_users": len(DEMO_USERS),
         "active_sessions": active_sessions,
-        "categories": categories
+        "categories": categories,
+        "dataset_events": total_events_in_dataset,
+        "live_events": total_live_events
     })

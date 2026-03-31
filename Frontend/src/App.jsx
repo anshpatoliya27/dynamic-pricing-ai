@@ -426,6 +426,55 @@ function App() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Demand Stats from ML Model */}
+                  {productPricing.demand_stats && (
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10,
+                      marginTop: 16, padding: 14, borderRadius: 12,
+                      background: 'var(--bg-secondary, #f8f9fc)'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--primary)' }}>
+                          {productPricing.demand_stats.views}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Views</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--success, #22c55e)' }}>
+                          {productPricing.demand_stats.purchases}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Purchases</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--warning, #f59e0b)' }}>
+                          {productPricing.demand_stats.cart_adds}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Cart Adds</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--danger, #ef4444)' }}>
+                          {(productPricing.demand_stats.conversion_rate * 100).toFixed(1)}%
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Conversion</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cache Date Indicator */}
+                  {productPricing.cache_date && (
+                    <div style={{
+                      marginTop: 12, fontSize: 11, color: 'var(--text-muted)',
+                      display: 'flex', alignItems: 'center', gap: 6
+                    }}>
+                      <span>🔄</span> Price calculated for {productPricing.cache_date} • Refreshes daily
+                      {productPricing.ml_factor && (
+                        <span style={{ marginLeft: 'auto', fontFamily: 'monospace' }}>
+                          ML Factor: {productPricing.ml_factor}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="loading-container">
@@ -452,6 +501,25 @@ function App() {
                       </div>
                       <div className="rec-scroll">
                         {productRecs.category_based.products.map(rec => (
+                          <div key={rec.product_id} className="rec-card" onClick={() => handleRecClick(rec)}>
+                            <div className="rec-card-emoji">{rec.image}</div>
+                            <div className="rec-card-name">{rec.name}</div>
+                            <div className="rec-card-price">${rec.base_price}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Frequently Bought Together (Apriori Model) */}
+                  {productRecs.frequently_bought?.products?.length > 0 && (
+                    <div className="rec-group">
+                      <div className="rec-group-header">
+                        <span className="rec-group-title">🔗 Frequently Bought Together</span>
+                        <span className="rec-group-explanation">{productRecs.frequently_bought.explanation}</span>
+                      </div>
+                      <div className="rec-scroll">
+                        {productRecs.frequently_bought.products.map(rec => (
                           <div key={rec.product_id} className="rec-card" onClick={() => handleRecClick(rec)}>
                             <div className="rec-card-emoji">{rec.image}</div>
                             <div className="rec-card-name">{rec.name}</div>
